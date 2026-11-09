@@ -1,0 +1,53 @@
+services:
+  - type: web
+    name: chit
+    runtime: node
+    plan: starter
+    buildCommand: npm ci && npm run build
+    startCommand: npm run db:push && npm run db:seed:if-empty && npm start
+    healthCheckPath: /
+    disk:
+      name: chit-data
+      mountPath: /var/data
+      sizeGB: 1
+    envVars:
+      - key: NODE_VERSION
+        value: 22
+      - key: DATABASE_URL
+        value: file:/var/data/chit.db
+      - key: PAYPAL_CLIENT_ID
+        sync: false
+      - key: PAYPAL_CLIENT_SECRET
+        sync: false
+      - key: PAYPAL_WEBHOOK_ID
+        sync: false
+      - key: APP_URL
+        sync: false
+      - key: ADMIN_TOKEN
+        generateValue: true
+      - key: DEMO_MODE
+        value: "false"
+      - key: AI_MODEL
+        sync: false
+      - key: AI_API_KEY
+        sync: false
+      - key: AI_BASE_URL
+        sync: false
+      - key: ZAPIER_WEBHOOK_URL
+        sync: false
+      - key: CRON_SECRET
+        generateValue: true
+  - type: cron
+    name: chit-agents
+    runtime: node
+    schedule: "0 */6 * * *"
+    buildCommand: echo ready
+    startCommand: node scripts/run-agents.mjs
+    envVars:
+      - key: CHIT_BASE_URL
+        sync: false
+      - key: CRON_SECRET
+        fromService:
+          name: chit
+          type: web
+          envVarKey: CRON_SECRET

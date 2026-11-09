@@ -1,0 +1,136 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+enum CircleMode {
+  FIXED
+  BIDDING
+}
+
+enum RoundStatus {
+  OPEN
+  CLOSED
+  PAID_OUT
+}
+
+enum ContributionStatus {
+  PENDING
+  PAID
+}
+
+enum LedgerType {
+  CONTRIBUTION
+  PAYOUT
+  COMMISSION
+  DIVIDEND
+  DISPUTE
+}
+
+model Circle {
+  id                 String        @id @default(cuid())
+  name               String
+  mode               CircleMode
+  contributionAmount Decimal
+  currency           String        @default("USD")
+  frequency          String        @default("MONTHLY")
+  commissionPercent  Decimal       @default(0)
+  maxDiscountPercent Decimal       @default(30)
+  currentRound       Int           @default(1)
+  createdAt          DateTime      @default(now())
+  members            Member[]
+  rounds             Round[]
+  ledgerEntries      LedgerEntry[]
+  agentActions       AgentAction[]
+}
+
+model Member {
+  id             String         @id @default(cuid())
+  circleId       String
+  circle         Circle         @relation(fields: [circleId], references: [id], onDelete: Cascade)
+  name           String
+  email          String
+  payoutPosition Int
+  riskScore      Int            @default(0)
+  riskReason     String?
+  hasWon         Boolean        @default(false)
+  contributions  Contribution[]
+  bids           Bid[]
+  wonRounds      Round[]        @relation("RoundWinner")
+
+  @@unique([circleId, email])
+  @@unique([circleId, payoutPosition])
+}
+
+model Round {
+  id             String         @id @default(cuid())
+  circleId       String
+  circle         Circle         @relation(fields: [circleId], references: [id], onDelete: Cascade)
+  number         Int
+  dueDate        DateTime
+  winnerMemberId String?
+  winner         Member?        @relation("RoundWinner", fields: [winnerMemberId], references: [id])
+  winningBid     Decimal?
+  payoutReference String?
+  status         RoundStatus    @default(OPEN)
+  contributions  Contribution[]
+  bids           Bid[]
+
+  @@unique([circleId, number])
+}
+
+model Contribution {
+  id            String             @id @default(cuid())
+  roundId       String
+  round         Round              @relation(fields: [roundId], references: [id], onDelete: Cascade)
+  memberId      String
+  member        Member             @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  paypalOrderId String?            @unique
+  paypalCaptureId String?          @unique
+  status        ContributionStatus @default(PENDING)
+  paidAt        DateTime?
+
+  @@unique([roundId, memberId])
+}
+
+model Bid {
+  id       String  @id @default(cuid())
+  roundId  String
+  round    Round   @relation(fields: [roundId], references: [id], onDelete: Cascade)
+  memberId String
+  member   Member  @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  amount   Decimal
+
+  @@unique([roundId, memberId])
+}
+
+model LedgerEntry {
+  id        String     @id @default(cuid())
+  circleId  String
+  circle    Circle     @relation(fields: [circleId], references: [id], onDelete: Cascade)
+  type      LedgerType
+  sequence  Int
+  payload   Json
+  prevHash  String
+  hash      String
+  createdAt DateTime   @default(now())
+
+  @@unique([circleId, sequence])
+  @@index([circleId, createdAt, id])
+}
+
+model AgentAction {
+  id        String   @id @default(cuid())
+  circleId  String
+  circle    Circle   @relation(fields: [circleId], references: [id], onDelete: Cascade)
+  agent     String
+  decision  String
+  reasoning String
+  createdAt DateTime @default(now())
+
+  @@index([circleId, createdAt])
+}
